@@ -520,8 +520,8 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                     if (desc.equals("(ILorg/objectweb/asm/ClassVisitor;)V") || desc.equals("(ILorg/objectweb/asm/MethodVisitor;)V") || desc.equals("(ILorg/objectweb/asm/FieldVisitor;)V")) {
                         gathering = false;
                         int targetPops = 2;
-                        int visited= 0;
-                        for (int j = popCodes.size() - 1; j > 0 ; j--) {
+                        int visited = 0;
+                        for (int j = popCodes.size() - 1; j >= 0; j--) {
                             visited++;
                             int popCode = popCodes.get(j);
                             for (int i : stackPushOpcode) {
@@ -541,12 +541,13 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                         varIdx = varIdx.subList(varIdx.size() - visited, varIdx.size());
 
                         for (int i = 0; i < popCodes.size(); i++) {
-                            if (i == 1) {
-                                if (popCodes.get(i) == Opcodes.LDC) {
-                                    super.visitLdcInsn(Opcodes.ASM9);
-                                } else if (popCodes.get(i) == Opcodes.ILOAD) {
-                                    super.visitLdcInsn(Opcodes.ASM9);
-                                }
+
+                            if (popCodes.get(i) == Opcodes.LDC) {
+                                super.visitLdcInsn(Opcodes.ASM9);
+                                continue;
+                            } else if (popCodes.get(i) == Opcodes.ILOAD) {
+                                super.visitLdcInsn(Opcodes.ASM9);
+
                                 continue;
                             }
                             for (int j : varInsn) {
@@ -564,10 +565,10 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                         }
                         asmUpper.changed = true;
                     } else if (desc.equals("(I)V")) {
-                        gathering =false;
+                        gathering = false;
                         int targetPops = 1;
-                        int visited= 0;
-                        for (int j = popCodes.size() - 1; j > 0 ; j--) {
+                        int visited = 0;
+                        for (int j = popCodes.size() - 1; j >= 0; j--) {
                             visited++;
                             int popCode = popCodes.get(j);
                             for (int i : stackPushOpcode) {
@@ -582,17 +583,18 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                             }
                         }
                         popCodes = popCodes.subList(popCodes.size() - visited, popCodes.size());
-                        varIdx = varIdx.subList(varIdx.size() -  visited, varIdx.size());
+                        varIdx = varIdx.subList(varIdx.size() - visited, varIdx.size());
 
                         for (int i = 0; i < popCodes.size(); i++) {
-                            if (i == 0) {
-                                if (popCodes.get(i) == Opcodes.LDC) {
-                                    super.visitLdcInsn(Opcodes.ASM9);
-                                } else if (popCodes.get(i) == Opcodes.ILOAD) {
-                                    super.visitLdcInsn(Opcodes.ASM9);
-                                }
+                            if (popCodes.get(i) == Opcodes.LDC) {
+                                super.visitLdcInsn(Opcodes.ASM9);
+                                continue;
+                            } else if (popCodes.get(i) == Opcodes.ILOAD) {
+                                super.visitLdcInsn(Opcodes.ASM9);
                                 continue;
                             }
+
+
                             for (int j : varInsn) {
                                 if (j == popCodes.get(i)) {
                                     super.visitVarInsn(popCodes.get(i), (Integer) varIdx.get(i));
