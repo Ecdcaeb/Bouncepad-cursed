@@ -17,6 +17,7 @@ import java.util.jar.Manifest;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
+import org.objectweb.asm.*;
 
 public abstract class LaunchClassLoader extends URLClassLoader {
 
@@ -110,19 +111,6 @@ public abstract class LaunchClassLoader extends URLClassLoader {
             return cachedClasses.get(name);
         }
 
-        for (final String exception : transformerExceptions) {
-            if (name.startsWith(exception)) {
-                try {
-                    final Class<?> clazz = super.findClass(name);
-                    cachedClasses.put(name, clazz);
-                    return clazz;
-                } catch (ClassNotFoundException e) {
-                    invalidClasses.add(name);
-                    throw e;
-                }
-            }
-        }
-
         try {
             final String transformedName = transformName(name);
             if (cachedClasses.containsKey(transformedName)) {
@@ -170,7 +158,19 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                 }
             }
 
-            final byte[] transformedClass = runTransformers(untransformedName, transformedName, getClassBytes(untransformedName));
+            byte[] transformedClass;
+
+            for (final String exception : transformerExceptions) {
+                if (name.startsWith(exception)) {
+                    transformedClass = new ASMUpper().transform(untransformedName, transformedName, getClassBytes(name));
+                    final CodeSource codeSource = urlConnection == null ? null : new CodeSource(urlConnection.getURL(), signers);
+                    final Class<?> clazz = super.defineClass(name, transformedClass, 0, transformedClass.length, codeSource);
+                    cachedClasses.put(name, clazz);
+                    return clazz;
+                }
+            }
+
+            transformedClass = runTransformers(untransformedName, transformedName, getClassBytes(untransformedName));
             if (DEBUG_SAVE) {
                 saveTransformedClass(transformedClass, transformedName);
             }
@@ -262,6 +262,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     }
 
     private byte[] runTransformers(final String name, final String transformedName, byte[] basicClass) {
+        basicClass = new ASMUpper().transform(name, transformedName, basicClass);
         if (DEBUG_FINER) {
             LogWrapper.finest("Beginning transform of {%s (%s)} Start Length: %d", name, transformedName, (basicClass == null ? 0 : basicClass.length));
             for (final IClassTransformer transformer : transformers) {
@@ -387,5 +388,128 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     public void clearNegativeEntries(Set<String> entriesToClear) {
         negativeResourceCache.removeAll(entriesToClear);
     }
+    public class ASMUpper {
 
+        public boolean changed;
+
+        public byte[] transform(String s, String s1, byte[] bytes) {
+            if (bytes == null) {
+                return null;
+            }
+
+            if (bytes.length == 0) {
+                return bytes;
+            }
+
+            ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            ClassReader classReader = new ClassReader(bytes);
+
+
+            String className = classReader.getClassName();
+            String superClassName = classReader.getSuperName();
+
+            if (superClassName.equals("org/objectweb/asm/ClassVisitor") || superClassName.equals("org/objectweb/asm/MethodVisitor") || superClassName.equals("org/objectweb/asm/FieldVisitor")) {
+                classReader.accept(new MyClassVisitor(classWriter, this), 0);
+                if (changed) {
+                    System.out.printf("Uppatched ASM to ASM9 on class: " + className);
+                    System.out.printf("SuperClass: " + superClassName);
+                    return classWriter.toByteArray();
+                }
+            }
+
+            return bytes;
+        }
+
+        class MyClassVisitor extends ClassVisitor {
+
+            ASMUpper asmUpper;
+
+            protected MyClassVisitor(ClassWriter classWriter, ASMUpper asmUpper) {
+                super(Opcodes.ASM9, classWriter);
+                this.asmUpper = asmUpper;
+            }
+
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                if (name.equals("<init>")) {
+                    MethodVisitor methodVisitor = cv.visitMethod(access, name, descriptor, signature, exceptions);
+                    return new MyMethodVisitor(Opcodes.ASM9, methodVisitor, asmUpper);
+                }
+                return super.visitMethod(access, name, descriptor, signature, exceptions);
+            }
+        }
+
+        class MyMethodVisitor extends MethodVisitor {
+
+            ASMUpper asmUpper;
+            List<Integer> popCodes = new ArrayList<>();
+            List<Integer> varIdx = new ArrayList<>();
+
+            protected MyMethodVisitor(int api, MethodVisitor methodVisitor, ASMUpper asmUpper) {
+                super(api, methodVisitor);
+                this.asmUpper = asmUpper;
+            }
+
+            @Override
+            public void visitVarInsn(int opcode, int varIndex) {
+                if (opcode == Opcodes.ALOAD || opcode == Opcodes.ILOAD) {
+                    popCodes.add(opcode);
+                    varIdx.add(varIndex);
+                }
+                super.visitVarInsn(opcode, varIndex);
+            }
+
+            @Override
+            public void visitLdcInsn(Object value) {
+                if (value instanceof Integer intValue) {
+                    popCodes.add(Opcodes.LDC);
+                    varIdx.add(intValue);
+                }
+                super.visitLdcInsn(value);
+            }
+
+            @Override
+            public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
+                if (opcode == Opcodes.INVOKESPECIAL) {
+                    if (desc.equals("(ILorg/objectweb/asm/ClassVisitor;)V") || desc.equals("(ILorg/objectweb/asm/MethodVisitor;)V") || desc.equals("(ILorg/objectweb/asm/FieldVisitor;)V")) {
+                        for (Integer popCode : popCodes) {
+                            if (popCode == Opcodes.ALOAD) {
+                                super.visitInsn(Opcodes.POP);
+                            }
+                        }
+                        for (int i = 0; i < popCodes.size(); i++) {
+                            if (i == 1) {
+                                if (popCodes.get(i) == Opcodes.LDC) {
+                                    super.visitLdcInsn(Opcodes.ASM9);
+                                } else if (popCodes.get(i) == Opcodes.ILOAD){
+                                    super.visitLdcInsn(Opcodes.ASM9);
+                                }
+                            } else if (popCodes.get(i) == Opcodes.ALOAD) {
+                                super.visitVarInsn(popCodes.get(i), varIdx.get(i));
+                            }
+                        }
+                        asmUpper.changed = true;
+
+                    } else if (desc.equals("(I)V")) {
+                        for (Integer popCode : popCodes) {
+                            if (popCode == Opcodes.ALOAD) {
+                                super.visitInsn(Opcodes.POP);
+                            }
+                        }
+                        for (int i = 0; i < popCodes.size(); i++) {
+                            if (i == 0) {
+                                super.visitVarInsn(Opcodes.ALOAD, 0);
+                                super.visitLdcInsn(Opcodes.ASM9);
+                            } else if (popCodes.get(i) == Opcodes.ALOAD || popCodes.get(i) == Opcodes.ILOAD) {
+                                super.visitVarInsn(popCodes.get(i), varIdx.get(i));
+                            }
+                        }
+                        asmUpper.changed = true;
+                    }
+                }
+                System.out.printf("popCodes size: " + popCodes.size());
+                super.visitMethodInsn(opcode, owner, name, desc, itf);
+            }
+        }
+    }
 }
