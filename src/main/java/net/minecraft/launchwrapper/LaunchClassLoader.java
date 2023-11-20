@@ -415,8 +415,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
             }
 
             if (changed) {
-                System.out.printf("Uppatched ASM to ASM9 on class: " + className);
-                System.out.printf("SuperClass: " + superClassName);
+                LogWrapper.warning("[Bouncepad] Uppatched ASM to ASM9 on class: " + className + ", its super class is" + superClassName + ", please update your mod!");
                 return classWriter.toByteArray();
             }
 

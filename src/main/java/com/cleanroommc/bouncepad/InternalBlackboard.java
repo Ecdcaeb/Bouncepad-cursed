@@ -9,7 +9,7 @@ import java.util.function.Consumer;
 
 public class InternalBlackboard implements Blackboard {
 
-    static final InternalBlackboard INSTANCE = new InternalBlackboard();
+    public static final InternalBlackboard INSTANCE = new InternalBlackboard();
 
     final Map<String, Object> map = new HashMap<>();
 
@@ -29,7 +29,7 @@ public class InternalBlackboard implements Blackboard {
         Objects.requireNonNull(key, "Key for the Blackboard must not be null");
         int pos = key.indexOf(':');
         if (pos <= 0 || pos >= key.length() - 1) {
-            throw new IllegalArgumentException("Invalid key for Blackboard, for it must be in this format: namespace:path");
+            throw new IllegalArgumentException("Invalid key\"" + key + "\"for Blackboard, for it must be in this format: namespace:path");
         }
         Object previous = this.map.get(key);
         if (overwrite) {

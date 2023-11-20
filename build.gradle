@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'com.cleanroommc'
-version '0.4'
+version '0.4.6-cursed'
 
 repositories {
     mavenCentral()
@@ -42,20 +42,21 @@ processResources {
     }
 }
 
+
 publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-        }
-    }
-    // select the repositories you want to publish to
     repositories {
         maven {
-            url cleanroom_maven
-            credentials {
-                username cleanroom_user
-                password cleanroom_pass
+            name = "outlandsReleases"
+            url = "https://maven.outlands.top/releases"
+            credentials(PasswordCredentials)
+            authentication {
+                basic(BasicAuthentication)
             }
+        }
+    }
+    publications {
+        maven(MavenPublication) {
+            from components.java
         }
     }
 }
