@@ -415,7 +415,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
             }
 
             if (changed) {
-                LogWrapper.warning("[Bouncepad] Uppatched ASM to ASM9 on class: " + className + ", its super class is: " + superClassName + ", please update your mod!");
+                System.out.println("[Bouncepad] Uppatched ASM to ASM9 on class: " + className + ", its super class is: " + superClassName + ", please update your mod!");
                 return classWriter.toByteArray();
             }
 
@@ -534,7 +534,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                                 break;
                             }
                         }
-                        LogWrapper.warning("Visited: " + visited + ", popCodes Size: " + popCodes.size());
+                        System.out.println("Visited: " + visited + ", popCodes Size: " + popCodes.size());
                         popCodes = popCodes.subList(popCodes.size() - visited, popCodes.size());
                         varIdx = varIdx.subList(varIdx.size() - visited, varIdx.size());
 
