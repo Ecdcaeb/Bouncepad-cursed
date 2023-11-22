@@ -534,8 +534,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                                 break;
                             }
                         }
-                        System.out.printf("Visited: " + visited);
-                        System.out.printf("popCodes Size: " + popCodes.size());
+                        LogWrapper.warning("Visited: " + visited + ", popCodes Size: " + popCodes.size());
                         popCodes = popCodes.subList(popCodes.size() - visited, popCodes.size());
                         varIdx = varIdx.subList(varIdx.size() - visited, varIdx.size());
 
