@@ -1,6 +1,8 @@
 package com.cleanroommc.bouncepad;
 
 import com.cleanroommc.bouncepad.api.Blackboard;
+import net.minecraft.launchwrapper.LogWrapper;
+import org.apache.logging.log4j.Level;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,7 +31,7 @@ public class InternalBlackboard implements Blackboard {
         Objects.requireNonNull(key, "Key for the Blackboard must not be null");
         int pos = key.indexOf(':');
         if (pos <= 0 || pos >= key.length() - 1) {
-            throw new IllegalArgumentException("Invalid key\"" + key + "\"for Blackboard, for it must be in this format: namespace:path");
+            LogWrapper.log(Level.WARN, "Invalid key\"" + key + "\"for Blackboard, for it must be in this format: namespace:path in future release");
         }
         Object previous = this.map.get(key);
         if (overwrite) {
