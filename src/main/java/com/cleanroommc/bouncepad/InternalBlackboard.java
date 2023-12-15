@@ -5,6 +5,7 @@ import net.minecraft.launchwrapper.LogWrapper;
 import org.apache.logging.log4j.Level;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -13,7 +14,7 @@ public class InternalBlackboard implements Blackboard {
 
     public static final InternalBlackboard INSTANCE = new InternalBlackboard();
 
-    final Map<String, Object> map = new HashMap<>();
+    final Map<String, Object> map = new LinkedHashMap<>();
 
     Map<String, Consumer<Object>> callbacks;
 
