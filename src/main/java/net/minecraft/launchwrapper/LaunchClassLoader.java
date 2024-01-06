@@ -132,8 +132,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
             CodeSigner[] signers = null;
 
             if (lastDot > -1 && !untransformedName.startsWith("net.minecraft.")) {
-                if (urlConnection instanceof JarURLConnection) {
-                    final JarURLConnection jarURLConnection = (JarURLConnection) urlConnection;
+                if (urlConnection instanceof JarURLConnection jarURLConnection) {
                     final JarFile jarFile = jarURLConnection.getJarFile();
 
                     if (jarFile != null && jarFile.getManifest() != null) {
@@ -187,8 +186,8 @@ public abstract class LaunchClassLoader extends URLClassLoader {
         } catch (Throwable e) {
             invalidClasses.add(name);
             if (DEBUG) {
-                LogWrapper.log(Level.TRACE, e, "Exception encountered attempting classloading of %s", name);
-                LogManager.getLogger("LaunchWrapper").log(Level.ERROR, "Exception encountered attempting classloading of %s", e);
+                LogWrapper.log(Level.ERROR, e, "Exception encountered attempting classloading of %s", name);
+                LogManager.getLogger("LaunchWrapper").log(Level.ERROR, "Exception encountered attempting classloading\n" + e);
             }
             throw new ClassNotFoundException(name, e);
         }
@@ -375,13 +374,13 @@ public abstract class LaunchClassLoader extends URLClassLoader {
             final URL classResource = findResource(resourcePath);
 
             if (classResource == null) {
-                if (DEBUG) LogWrapper.finest("Failed to find class resource %s", resourcePath);
+                if (DEBUG) LogWrapper.log(Level.DEBUG,"Failed to find class resource %s", resourcePath);
                 negativeResourceCache.add(name);
                 return null;
             }
             classStream = classResource.openStream();
 
-            if (DEBUG) LogWrapper.finest("Loading class %s from resource %s", name, classResource.toString());
+            if (DEBUG) LogWrapper.log(Level.DEBUG, "Loading class %s from resource %s", name, classResource.toString());
             final byte[] data = readFully(classStream);
             resourceCache.put(name, data);
             return data;
@@ -431,6 +430,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
 
             String className = classReader.getClassName();
             boolean shouldTransform = shouldTransform(classReader);
+            int version = 5;
 
             if (shouldTransform) 
             {
@@ -448,7 +448,8 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                                 {
                                     if (ldcInsnNode.cst instanceof Integer)
                                     {
-                                        if (((int)(ldcInsnNode.cst) >> 16) < 9 && ((int)(ldcInsnNode.cst) & mask) == 0) {
+                                        version = ((int)(ldcInsnNode.cst) >> 16);
+                                        if (version < 9 && ((int)(ldcInsnNode.cst) & mask) == 0) {
                                             instructions.insert(ldcInsnNode, new LdcInsnNode(Opcodes.ASM9));
                                             instructions.remove(ldcInsnNode);
                                             modified = true;
@@ -462,7 +463,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                 if (modified)
                 {
                     ClassWriter classWriter = new ClassWriter(0);
-                    LogWrapper.log(Level.WARN, "[Bouncepad] Uppatched ASM5 to ASM9 on class: " + className + ", please port the mod to Cleanroom!");
+                    LogWrapper.log(Level.WARN, "[Bouncepad] Uppatched ASM" + version + " to ASM9 on class: " + className + ", please port the mod to Cleanroom!");
                     classNode.accept(classWriter);
                     return classWriter.toByteArray();
                 }
