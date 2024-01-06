@@ -402,7 +402,8 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     public void clearNegativeEntries(Set<String> entriesToClear) {
         negativeResourceCache.removeAll(entriesToClear);
     }
-    public class ASMVersionUpper implements IClassTransformer {
+    private static class ASMVersionUpper implements IClassTransformer {
+        private static final int mask = 65535; //0b1111111111111111
 
         private static final String[] classList = new String[]{
                 "org/objectweb/asm/ClassVisitor",
@@ -445,11 +446,13 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                             {
                                 if (insnNode.getOpcode() == Opcodes.LDC && insnNode instanceof LdcInsnNode ldcInsnNode)
                                 {
-                                    if (ldcInsnNode.cst.equals(Opcodes.ASM5))
+                                    if (ldcInsnNode.cst instanceof Integer)
                                     {
-                                        instructions.insert(ldcInsnNode, new LdcInsnNode(Opcodes.ASM9));
-                                        instructions.remove(ldcInsnNode);
-                                        modified = true;
+                                        if (((int)(ldcInsnNode.cst) >> 16) < 9 && ((int)(ldcInsnNode.cst) & mask) == 0) {
+                                            instructions.insert(ldcInsnNode, new LdcInsnNode(Opcodes.ASM9));
+                                            instructions.remove(ldcInsnNode);
+                                            modified = true;
+                                        }
                                     }
                                 }
                             }
