@@ -32,6 +32,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
 
     private Set<String> classLoaderExceptions = new HashSet<>();
     private Set<String> transformerExceptions = new HashSet<>();
+    private Set<String> exclusionBlacklist = new LinkedHashSet<>();
     private Map<String,byte[]> resourceCache = new ConcurrentHashMap<>(1000);
     private Set<String> negativeResourceCache = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
@@ -59,6 +60,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
         addClassLoaderExclusion("org.lwjgl.");
         addClassLoaderExclusion("org.apache.logging.");
         addClassLoaderExclusion("net.minecraft.launchwrapper.");
+        addClassLoaderExclusion("org.spongepowered.asm.");
 
         // transformer exclusions
         addTransformerExclusion("javax.");
@@ -336,7 +338,16 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     }
 
     public void addTransformerExclusion(String toExclude) {
+        for (String trans : exclusionBlacklist) {
+            if (toExclude.startsWith(trans)) {
+                return;
+            }
+        }
         transformerExceptions.add(toExclude);
+    }
+    
+    public void addTransformerExclusionFilter(String toFilter) {
+        exclusionBlacklist.add(toFilter);
     }
 
     public byte[] getClassBytes(String name) throws IOException {
