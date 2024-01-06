@@ -1,5 +1,10 @@
 package net.minecraft.launchwrapper;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.objectweb.asm.*;
+import org.objectweb.asm.tree.*;
+
 import java.io.*;
 import java.net.JarURLConnection;
 import java.net.URL;
@@ -14,10 +19,6 @@ import java.util.jar.Attributes.Name;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.objectweb.asm.*;
 
 public abstract class LaunchClassLoader extends URLClassLoader {
 
@@ -166,7 +167,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
 
             for (final String exception : transformerExceptions) {
                 if (name.startsWith(exception)) {
-                    transformedClass = new ASMUpper().transform(untransformedName, transformedName, getClassBytes(name));
+                    transformedClass = new ASMVersionUpper().transform(untransformedName, transformedName, getClassBytes(name));
                     final CodeSource codeSource = urlConnection == null ? null : new CodeSource(urlConnection.getURL(), signers);
                     final Class<?> clazz = super.defineClass(name, transformedClass, 0, transformedClass.length, codeSource);
                     cachedClasses.put(name, clazz);
@@ -266,7 +267,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     }
 
     private byte[] runTransformers(final String name, final String transformedName, byte[] basicClass) {
-        basicClass = new ASMUpper().transform(name, transformedName, basicClass);
+        basicClass = new ASMVersionUpper().transform(name, transformedName, basicClass);
         if (DEBUG_FINER) {
             LogWrapper.finest("Beginning transform of {%s (%s)} Start Length: %d", name, transformedName, (basicClass == null ? 0 : basicClass.length));
             for (final IClassTransformer transformer : transformers) {
@@ -401,10 +402,19 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     public void clearNegativeEntries(Set<String> entriesToClear) {
         negativeResourceCache.removeAll(entriesToClear);
     }
-    public class ASMUpper {
+    public class ASMVersionUpper implements IClassTransformer {
 
-        public boolean changed;
+        private static final String[] classList = new String[]{
+                "org/objectweb/asm/ClassVisitor",
+                "org/objectweb/asm/MethodVisitor",
+                "org/objectweb/asm/FieldVisitor"
+        };
 
+        private static final String[] interfaceList = new String[]{
+                "net/minecraft/launchwrapper/IClassTransformer"
+        };
+
+        @Override
         public byte[] transform(String s, String s1, byte[] bytes) {
             if (bytes == null) {
                 return null;
@@ -413,347 +423,68 @@ public abstract class LaunchClassLoader extends URLClassLoader {
             if (bytes.length == 0) {
                 return bytes;
             }
-
+            ClassNode classNode = new ClassNode();
             ClassReader classReader = new ClassReader(bytes);
-            ClassWriter classWriter = new ClassWriter(classReader, ClassWriter.COMPUTE_MAXS);
+            classReader.accept(classNode, 0);
+
 
             String className = classReader.getClassName();
-            String superClassName = classReader.getSuperName();
+            boolean shouldTransform = shouldTransform(classReader);
 
-
-            if (superClassName.equals("org/objectweb/asm/ClassVisitor") || superClassName.equals("org/objectweb/asm/MethodVisitor") || superClassName.equals("org/objectweb/asm/FieldVisitor")) {
-                classReader.accept(new ASMUpperClassVisitor(classWriter, this), 0);
-            } else {
-               // classReader.accept(new ASMFrameUpperClassVisitor(classWriter, this), 0);
+            if (shouldTransform) 
+            {
+                boolean modified = false;
+                if (classNode.methods != null)
+                {
+                    for (MethodNode methodNode : classNode.methods)
+                    {
+                        InsnList instructions = methodNode.instructions;
+                        if (instructions != null)
+                        {
+                            for (AbstractInsnNode insnNode : instructions)
+                            {
+                                if (insnNode.getOpcode() == Opcodes.LDC && insnNode instanceof LdcInsnNode ldcInsnNode)
+                                {
+                                    if (ldcInsnNode.cst.equals(Opcodes.ASM5))
+                                    {
+                                        instructions.insert(ldcInsnNode, new LdcInsnNode(Opcodes.ASM9));
+                                        instructions.remove(ldcInsnNode);
+                                        modified = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (modified)
+                {
+                    ClassWriter classWriter = new ClassWriter(0);
+                    LogWrapper.log(Level.WARN, "[Bouncepad] Uppatched ASM5 to ASM9 on class: " + className + ", please port the mod to Cleanroom!");
+                    classNode.accept(classWriter);
+                    return classWriter.toByteArray();
+                }
             }
-
-            if (changed) {
-                LogWrapper.log(Level.WARN, "[Bouncepad] Uppatched ASM to ASM9 on class: " + className + ", its super class is: " + superClassName + ", please update your mod!");
-                return classWriter.toByteArray();
-            }
-
             return bytes;
         }
 
-        class ASMUpperClassVisitor extends ClassVisitor {
-
-            ASMUpper asmUpper;
-
-            protected ASMUpperClassVisitor(ClassWriter classWriter, ASMUpper asmUpper) {
-                super(Opcodes.ASM9, classWriter);
-                this.asmUpper = asmUpper;
-            }
-
-            @Override
-            public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
-                if (name.equals("<init>")) {
-                    MethodVisitor methodVisitor = cv.visitMethod(access, name, descriptor, signature, exceptions);
-                    return new ASMUpperMethodVisitor(Opcodes.ASM9, methodVisitor, asmUpper);
+        private static boolean shouldTransform(ClassReader classReader) {
+            String superClassName = classReader.getSuperName();
+            String[] interfaceNames = classReader.getInterfaces();
+            for (String clazz : classList) {
+                if (superClassName.equals(clazz)) {
+                    return true;
                 }
-                return super.visitMethod(access, name, descriptor, signature, exceptions);
             }
+
+            for (String itf : interfaceList) {
+                for (String name : interfaceNames) {
+                    if (name.equals(itf)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
-        class ASMUpperMethodVisitor extends MethodVisitor {
-
-            ASMUpper asmUpper;
-
-            boolean gathering = true;
-            List<Integer> popCodes = new ArrayList<>(0);
-            List<Object> varIdx = new ArrayList<>(0);
-
-            int[] varInsn = new int[]{Opcodes.ALOAD, Opcodes.ILOAD};
-            int[] insn = new int[]{
-                    Opcodes.ACONST_NULL,
-                    Opcodes.ICONST_M1,
-                    Opcodes.ICONST_0,
-                    Opcodes.ICONST_1,
-                    Opcodes.ICONST_2,
-                    Opcodes.ICONST_3,
-                    Opcodes.ICONST_4,
-                    Opcodes.ICONST_5};
-
-            int[] stackPushOpcode = new int[]{
-                    Opcodes.ALOAD,
-                    Opcodes.ILOAD,
-                    Opcodes.ACONST_NULL,
-                    Opcodes.ICONST_M1,
-                    Opcodes.ICONST_0,
-                    Opcodes.ICONST_1,
-                    Opcodes.ICONST_2,
-                    Opcodes.ICONST_3,
-                    Opcodes.ICONST_4,
-                    Opcodes.ICONST_5,
-                    Opcodes.LDC
-            };
-
-            protected ASMUpperMethodVisitor(int api, MethodVisitor methodVisitor, ASMUpper asmUpper) {
-                super(api, methodVisitor);
-                this.asmUpper = asmUpper;
-            }
-
-            @Override
-            public void visitVarInsn(int opcode, int varIndex) {
-                if (gathering) {
-                    if (opcode == Opcodes.ALOAD || opcode == Opcodes.ILOAD) {
-                        popCodes.add(opcode);
-                        varIdx.add(varIndex);
-                    }
-                }
-                super.visitVarInsn(opcode, varIndex);
-            }
-
-            @Override
-            public void visitInsn(int opcode) {
-                if (gathering) {
-                    for (int i : stackPushOpcode) {
-                        if (i == opcode) {
-                            popCodes.add(opcode);
-                            varIdx.add(Integer.MIN_VALUE);
-                            break;
-                        }
-                    }
-                }
-                super.visitInsn(opcode);
-            }
-
-            @Override
-            public void visitLdcInsn(Object value) {
-                if (gathering) {
-                    popCodes.add(Opcodes.LDC);
-                    varIdx.add(value);
-                }
-                super.visitLdcInsn(value);
-            }
-
-            @Override
-            public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
-                if (opcode == Opcodes.INVOKESPECIAL) {
-                    if (desc.equals("(ILorg/objectweb/asm/ClassVisitor;)V") || desc.equals("(ILorg/objectweb/asm/MethodVisitor;)V") || desc.equals("(ILorg/objectweb/asm/FieldVisitor;)V")) {
-                        gathering = false;
-                        int targetPops = 2;
-                        int visited = 0;
-                        for (int j = popCodes.size() - 1; j >= 0; j--) {
-                            visited++;
-                            int popCode = popCodes.get(j);
-                            for (int i : stackPushOpcode) {
-                                if (i == popCode) {
-                                    mv.visitInsn(Opcodes.POP);
-                                    targetPops--;
-                                    break;
-                                }
-                            }
-                            if (targetPops == 0) {
-                                break;
-                            }
-                        }
-                        LogWrapper.log(Level.WARN, "Visited: " + visited + ", popCodes Size: " + popCodes.size());
-                        popCodes = popCodes.subList(popCodes.size() - visited, popCodes.size());
-                        varIdx = varIdx.subList(varIdx.size() - visited, varIdx.size());
-
-                        for (int i = 0; i < popCodes.size(); i++) {
-
-                            if (popCodes.get(i) == Opcodes.LDC) {
-                                super.visitLdcInsn(Opcodes.ASM9);
-                                continue;
-                            } else if (popCodes.get(i) == Opcodes.ILOAD) {
-                                super.visitLdcInsn(Opcodes.ASM9);
-
-                                continue;
-                            }
-                            for (int j : varInsn) {
-                                if (j == popCodes.get(i)) {
-                                    super.visitVarInsn(popCodes.get(i), (Integer) varIdx.get(i));
-                                    break;
-                                }
-                            }
-                            for (int j : insn) {
-                                if (j == popCodes.get(i)) {
-                                    super.visitInsn(popCodes.get(i));
-                                    break;
-                                }
-                            }
-                        }
-                        asmUpper.changed = true;
-                    } else if (desc.equals("(I)V")) {
-                        gathering = false;
-                        int targetPops = 1;
-                        int visited = 0;
-                        for (int j = popCodes.size() - 1; j >= 0; j--) {
-                            visited++;
-                            int popCode = popCodes.get(j);
-                            for (int i : stackPushOpcode) {
-                                if (i == popCode) {
-                                    mv.visitInsn(Opcodes.POP);
-                                    targetPops--;
-                                    break;
-                                }
-                            }
-                            if (targetPops == 0) {
-                                break;
-                            }
-                        }
-                        popCodes = popCodes.subList(popCodes.size() - visited, popCodes.size());
-                        varIdx = varIdx.subList(varIdx.size() - visited, varIdx.size());
-
-                        for (int i = 0; i < popCodes.size(); i++) {
-                            if (popCodes.get(i) == Opcodes.LDC) {
-                                super.visitLdcInsn(Opcodes.ASM9);
-                                continue;
-                            } else if (popCodes.get(i) == Opcodes.ILOAD) {
-                                super.visitLdcInsn(Opcodes.ASM9);
-                                continue;
-                            }
-
-
-                            for (int j : varInsn) {
-                                if (j == popCodes.get(i)) {
-                                    super.visitVarInsn(popCodes.get(i), (Integer) varIdx.get(i));
-                                    break;
-                                }
-                            }
-                            for (int j : insn) {
-                                if (j == popCodes.get(i)) {
-                                    super.visitInsn(popCodes.get(i));
-                                    break;
-                                }
-                            }
-                        }
-                        asmUpper.changed = true;
-                    }
-                }
-                super.visitMethodInsn(opcode, owner, name, desc, itf);
-            }
-        }
-
-        class ASMFrameUpperClassVisitor extends ClassVisitor {
-
-            ASMUpper asmUpper;
-
-            protected ASMFrameUpperClassVisitor(ClassWriter classWriter, ASMUpper asmUpper) {
-                super(Opcodes.ASM9, classWriter);
-                this.asmUpper = asmUpper;
-            }
-
-            @Override
-            public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
-                MethodVisitor methodVisitor = cv.visitMethod(access, name, descriptor, signature, exceptions);
-                return new ASMFrameUpperMethodVisitor(Opcodes.ASM9, methodVisitor, asmUpper);
-            }
-        }
-
-
-        class ASMFrameUpperMethodVisitor extends MethodVisitor {
-
-            ASMUpper asmUpper;
-            List<Integer> popCodes = new ArrayList<>(5);
-            List<Object> varIdx = new ArrayList<Object>(5);
-
-            int[] varInsn = new int[]{Opcodes.ALOAD, Opcodes.ILOAD};
-            int[] insn = new int[]{Opcodes.ACONST_NULL,
-                    Opcodes.ICONST_M1,
-                    Opcodes.ICONST_0,
-                    Opcodes.ICONST_1,
-                    Opcodes.ICONST_2,
-                    Opcodes.ICONST_3,
-                    Opcodes.ICONST_4,
-                    Opcodes.ICONST_5};
-
-            int[] stackPushOpcode = new int[]{
-                    Opcodes.ALOAD,
-                    Opcodes.ILOAD,
-                    Opcodes.ACONST_NULL,
-                    Opcodes.ICONST_M1,
-                    Opcodes.ICONST_0,
-                    Opcodes.ICONST_1,
-                    Opcodes.ICONST_2,
-                    Opcodes.ICONST_3,
-                    Opcodes.ICONST_4,
-                    Opcodes.ICONST_5};
-
-            protected ASMFrameUpperMethodVisitor(int api, MethodVisitor methodVisitor, ASMUpper asmUpper) {
-                super(api, methodVisitor);
-                this.asmUpper = asmUpper;
-            }
-
-            @Override
-            public void visitVarInsn(int opcode, int varIndex) {
-                if (opcode == Opcodes.ALOAD || opcode == Opcodes.ILOAD) {
-                    popCodes.add(opcode);
-                    varIdx.add(varIndex);
-                }
-                super.visitVarInsn(opcode, varIndex);
-            }
-
-            @Override
-            public void visitInsn(int opcode) {
-                for (int i : stackPushOpcode) {
-                    if (i == opcode) {
-                        popCodes.add(opcode);
-                        varIdx.add(Integer.MIN_VALUE);
-                        break;
-                    }
-                }
-                super.visitInsn(opcode);
-            }
-
-            @Override
-            public void visitLdcInsn(Object value) {
-                popCodes.add(Opcodes.LDC);
-                varIdx.add(value);
-                super.visitLdcInsn(value);
-            }
-
-            @Override
-            public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
-                if (opcode == Opcodes.INVOKEVIRTUAL) {
-                    if (owner.equals("org/objectweb/asm/MethodVisitor")) {
-                        if (desc.equals("(II[Ljava/lang/Object;I[Ljava/lang/Object;)V")) {
-                            int targetPops = 5;
-                            int visited= 0;
-                            for (int j = popCodes.size() - 1; j > 0 ; j--) {
-                                int popCode = popCodes.get(j);
-                                for (int i : stackPushOpcode) {
-                                    if (i == popCode) {
-                                        super.visitInsn(Opcodes.POP);
-                                        targetPops--;
-                                        break;
-                                    }
-                                }
-                                if (targetPops == 0) {
-                                    break;
-                                }
-                                visited++;
-                            }
-                            popCodes = popCodes.subList(popCodes.size() - visited, popCodes.size());
-                            varIdx = varIdx.subList(varIdx.size() - visited, varIdx.size());
-
-                            for (int i = 0; i < popCodes.size(); i++) {
-                                if (i == 0) {
-                                    if (popCodes.get(i) == Opcodes.ICONST_3) {
-                                        super.visitInsn(Opcodes.ICONST_4);
-                                        continue;
-                                    }
-                                }
-                                for (int j : varInsn) {
-                                    if (j == popCodes.get(i)) {
-                                        super.visitVarInsn(popCodes.get(i), (Integer) varIdx.get(i));
-                                        break;
-                                    }
-                                }
-                                for (int j : insn) {
-                                    if (j == popCodes.get(i)) {
-                                        super.visitInsn(popCodes.get(i));
-                                        break;
-                                    }
-                                }
-                            }
-                            asmUpper.changed = true;
-                        }
-                    }
-                }
-                super.visitMethodInsn(opcode, owner, name, desc, itf);
-            }
-        }
     }
 }
