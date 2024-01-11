@@ -59,9 +59,10 @@ public abstract class LaunchClassLoader extends URLClassLoader {
         addClassLoaderExclusion("jdk.dynalink."); // Nashorn
         addClassLoaderExclusion("sun.");
         addClassLoaderExclusion("org.lwjgl.");
+        addClassLoaderExclusion("org.lwjgl3.");
         addClassLoaderExclusion("org.apache.logging.");
         addClassLoaderExclusion("net.minecraft.launchwrapper.");
-        addClassLoaderExclusion("org.spongepowered.asm.");
+        //addClassLoaderExclusion("org.spongepowered.asm.");
 
         // transformer exclusions
         addTransformerExclusion("javax.");
