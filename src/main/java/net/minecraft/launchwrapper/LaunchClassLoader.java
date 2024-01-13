@@ -447,13 +447,15 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                             {
                                 if (insnNode.getOpcode() == Opcodes.LDC && insnNode instanceof LdcInsnNode ldcInsnNode)
                                 {
-                                    if (ldcInsnNode.cst instanceof Integer)
+                                    if (ldcInsnNode.cst instanceof Integer value)
                                     {
-                                        version = ((int)(ldcInsnNode.cst) >> 16);
-                                        if (version < 9 && ((int)(ldcInsnNode.cst) & mask) == 0) {
-                                            instructions.insert(ldcInsnNode, new LdcInsnNode(Opcodes.ASM9));
-                                            instructions.remove(ldcInsnNode);
-                                            modified = true;
+                                        if (value > 0) {
+                                            version = value >> 16;
+                                            if (version < 9 && (value & mask) == 0) {
+                                                instructions.insert(ldcInsnNode, new LdcInsnNode(Opcodes.ASM9));
+                                                instructions.remove(ldcInsnNode);
+                                                modified = true;
+                                            }       
                                         }
                                     }
                                 }
