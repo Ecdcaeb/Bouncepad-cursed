@@ -57,6 +57,10 @@ public class Bouncepad {
 
     private static void runImagineBreaker() {
         String imagineBreakerLibraryName = System.mapLibraryName("imaginebreaker");
+        var osVersion = System.getProperty("os.version");
+        if(osVersion != null && osVersion.toLowerCase().contains("android")) {
+            imagineBreakerLibraryName = "libimaginebreaker_android.so";
+        }
         URL imagineBreakerLibraryUrl = NativeImagineBreaker.class.getClassLoader().getResource(imagineBreakerLibraryName);
         if (imagineBreakerLibraryUrl == null) {
             LOGGER.fatal("Unable to launch, {} cannot be found.", imagineBreakerLibraryName);
