@@ -28,12 +28,12 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     private ClassLoader parent = getClass().getClassLoader();
 
     private List<IClassTransformer> transformers = new ArrayList<>(2);
+    private List<IClassTransformer> superTransformers = new ArrayList<>(2);
     private Map<String, Class<?>> cachedClasses = new ConcurrentHashMap<>();
     private Set<String> invalidClasses = new HashSet<>(1000);
 
     private Set<String> classLoaderExceptions = new HashSet<>();
     private Set<String> transformerExceptions = new HashSet<>();
-    private Set<String> exclusionBlacklist = new LinkedHashSet<>();
     private Map<String,byte[]> resourceCache = new ConcurrentHashMap<>(1000);
     private Set<String> negativeResourceCache = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
@@ -98,6 +98,26 @@ public abstract class LaunchClassLoader extends URLClassLoader {
             }
         } catch (Exception e) {
             LogWrapper.log(Level.ERROR, e, "A critical problem occurred registering the ASM transformer class %s", transformerClassName);
+        }
+    }
+
+    public void registerSuperTransformer(String transformerClassName) {
+        try {
+            IClassTransformer transformer = (IClassTransformer) loadClass(transformerClassName).newInstance();
+            superTransformers.add(transformer);
+            if (transformer instanceof IClassNameTransformer && renameTransformer == null) {
+                renameTransformer = (IClassNameTransformer) transformer;
+            }
+        } catch (Exception e) {
+            LogWrapper.log(Level.ERROR, e, "A critical problem occurred registering the super ASM transformer class %s", transformerClassName);
+        }
+    }
+
+    public void unRegisterSuperTransformer(IClassTransformer transformer) {
+        try {
+            superTransformers.remove(transformer);
+        } catch (Exception e) {
+            LogWrapper.log(Level.ERROR, e, "A critical problem occurred unregistering the super ASM transformer class %s", transformer.getClass().getName());
         }
     }
 
@@ -167,7 +187,10 @@ public abstract class LaunchClassLoader extends URLClassLoader {
 
             for (final String exception : transformerExceptions) {
                 if (name.startsWith(exception)) {
-                    transformedClass = new ASMVersionUpper().transform(untransformedName, transformedName, getClassBytes(name));
+                    transformedClass = getClassBytes(name);
+                    for (final IClassTransformer transformer : superTransformers) {
+                        transformedClass = transformer.transform(name, transformedName, transformedClass);
+                    }
                     final CodeSource codeSource = urlConnection == null ? null : new CodeSource(urlConnection.getURL(), signers);
                     final Class<?> clazz = super.defineClass(name, transformedClass, 0, transformedClass.length, codeSource);
                     cachedClasses.put(name, clazz);
@@ -267,7 +290,6 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     }
 
     private byte[] runTransformers(final String name, final String transformedName, byte[] basicClass) {
-        basicClass = new ASMVersionUpper().transform(name, transformedName, basicClass);
         if (DEBUG_FINER) {
             LogWrapper.finest("Beginning transform of {%s (%s)} Start Length: %d", name, transformedName, (basicClass == null ? 0 : basicClass.length));
             for (final IClassTransformer transformer : transformers) {
@@ -276,12 +298,22 @@ public abstract class LaunchClassLoader extends URLClassLoader {
                 basicClass = transformer.transform(name, transformedName, basicClass);
                 LogWrapper.finest("After  Transformer {%s (%s)} %s: %d", name, transformedName, transName, (basicClass == null ? 0 : basicClass.length));
             }
+            for (final IClassTransformer transformer : superTransformers) {
+                final String transName = transformer.getClass().getName();
+                LogWrapper.finest("Before super Transformer {%s (%s)} %s: %d", name, transformedName, transName, (basicClass == null ? 0 : basicClass.length));
+                basicClass = transformer.transform(name, transformedName, basicClass);
+                LogWrapper.finest("After  super Transformer {%s (%s)} %s: %d", name, transformedName, transName, (basicClass == null ? 0 : basicClass.length));
+            }
             LogWrapper.finest("Ending transform of {%s (%s)} Start Length: %d", name, transformedName, (basicClass == null ? 0 : basicClass.length));
         } else {
             for (final IClassTransformer transformer : transformers) {
                 basicClass = transformer.transform(name, transformedName, basicClass);
             }
+            for (final IClassTransformer transformer : superTransformers) {
+                basicClass = transformer.transform(name, transformedName, basicClass);
+            }
         }
+        basicClass = new ASMVersionUpper().transform(name, transformedName, basicClass);
         return basicClass;
     }
 
@@ -334,22 +366,19 @@ public abstract class LaunchClassLoader extends URLClassLoader {
         return Collections.unmodifiableList(transformers);
     }
 
+    public List<IClassTransformer> getSuperTransformers() {
+        return Collections.unmodifiableList(superTransformers);
+    }
+
     public void addClassLoaderExclusion(String toExclude) {
         classLoaderExceptions.add(toExclude);
     }
 
     public void addTransformerExclusion(String toExclude) {
-        for (String trans : exclusionBlacklist) {
-            if (toExclude.startsWith(trans)) {
-                return;
-            }
-        }
         transformerExceptions.add(toExclude);
     }
     
-    public void addTransformerExclusionFilter(String toFilter) {
-        exclusionBlacklist.add(toFilter);
-    }
+
 
     public byte[] getClassBytes(String name) throws IOException {
         if (negativeResourceCache.contains(name)) {
@@ -402,7 +431,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     public void clearNegativeEntries(Set<String> entriesToClear) {
         negativeResourceCache.removeAll(entriesToClear);
     }
-    private static class ASMVersionUpper implements IClassTransformer {
+    private class ASMVersionUpper implements IClassTransformer {
         private static final int mask = 65535; //0b1111111111111111
 
         private static final String[] classList = new String[]{
