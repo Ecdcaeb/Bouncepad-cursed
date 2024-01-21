@@ -217,14 +217,17 @@ public abstract class LaunchClassLoader extends URLClassLoader {
             invalidClasses.add(name);
             if (DEBUG) {
                 LogWrapper.log(Level.ERROR, e, "Exception encountered attempting classloading of %s", name);
-                LogManager.getLogger("LaunchWrapper").log(Level.ERROR, "Exception encountered attempting classloading\n" + e);
+                LogManager.getLogger("LaunchWrapper").log(Level.ERROR, "caused by: " + e);
+                if (DEBUG_FINER) {
+                    LogManager.getLogger("LaunchWrapper").log(Level.ERROR, e.getStackTrace());
+                }
             }
             throw new ClassNotFoundException(name, e);
         }
     }
 
     private void saveTransformedClass(final byte[] data, final String transformedName) {
-        if (tempFolder == null) {
+        if (tempFolder == null || data == null) {
             return;
         }
 
