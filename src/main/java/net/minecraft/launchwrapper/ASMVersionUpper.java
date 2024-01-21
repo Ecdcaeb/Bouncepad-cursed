@@ -55,7 +55,7 @@ public class ASMVersionUpper implements IClassTransformer {
                                 {
                                     if (value > 0) {
                                         version = value >> 16;
-                                        if (version < 9 && (value & mask) == 0) {
+                                        if (version < 9 && version > 3 && (value & mask) == 0) {
                                             instructions.insert(ldcInsnNode, new LdcInsnNode(Opcodes.ASM9));
                                             instructions.remove(ldcInsnNode);
                                             modified = true;

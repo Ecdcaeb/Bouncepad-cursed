@@ -14,6 +14,7 @@ import java.security.CodeSigner;
 import java.security.CodeSource;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.jar.Attributes;
 import java.util.jar.Attributes.Name;
 import java.util.jar.JarEntry;
@@ -28,7 +29,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     private ClassLoader parent = getClass().getClassLoader();
 
     private List<IClassTransformer> transformers = new ArrayList<>(2);
-    private List<IClassTransformer> superTransformers = new ArrayList<>(2);
+    private List<IClassTransformer> superTransformers = new CopyOnWriteArrayList<>();
     private Map<String, Class<?>> cachedClasses = new ConcurrentHashMap<>();
     private Set<String> invalidClasses = new HashSet<>(1000);
 
