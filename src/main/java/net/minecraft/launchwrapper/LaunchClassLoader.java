@@ -2,19 +2,27 @@ package net.minecraft.launchwrapper;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
-import org.objectweb.asm.*;
-import org.objectweb.asm.tree.*;
 
-import java.io.*;
+import java.io.Closeable;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLConnection;
 import java.security.CodeSigner;
 import java.security.CodeSource;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.jar.Attributes;
 import java.util.jar.Attributes.Name;
 import java.util.jar.JarEntry;
@@ -29,7 +37,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     private ClassLoader parent = getClass().getClassLoader();
 
     private List<IClassTransformer> transformers = new ArrayList<>(2);
-    private List<IClassTransformer> superTransformers = new CopyOnWriteArrayList<>();
+    private Set<IClassTransformer> superTransformers = ConcurrentHashMap.newKeySet();
     private Map<String, Class<?>> cachedClasses = new ConcurrentHashMap<>();
     private Set<String> invalidClasses = new HashSet<>(1000);
 
@@ -63,15 +71,11 @@ public abstract class LaunchClassLoader extends URLClassLoader {
         addClassLoaderExclusion("org.lwjgl3.");
         addClassLoaderExclusion("org.apache.logging.");
         addClassLoaderExclusion("net.minecraft.launchwrapper.");
-        //addClassLoaderExclusion("org.spongepowered.asm.");
 
         // transformer exclusions
         addTransformerExclusion("javax.");
-        addTransformerExclusion("argo.");
         addTransformerExclusion("org.objectweb.asm.");
         addTransformerExclusion("com.google.common.");
-        addTransformerExclusion("org.bouncycastle.");
-        addTransformerExclusion("net.minecraft.launchwrapper.injector.");
         
         registerSuperTransformer("net.minecraft.launchwrapper.ASMVersionUpper");
 
@@ -216,8 +220,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
         } catch (Throwable e) {
             invalidClasses.add(name);
             if (DEBUG) {
-                LogWrapper.log(Level.ERROR, e, "Exception encountered attempting classloading of %s", name);
-                LogManager.getLogger("LaunchWrapper").log(Level.ERROR, "caused by: " + e);
+                LogWrapper.log(Level.ERROR, "Exception encountered attempting classloading of %s", name, e);
                 if (DEBUG_FINER) {
                     LogManager.getLogger("LaunchWrapper").log(Level.ERROR, e.getStackTrace());
                 }
@@ -376,7 +379,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
     }
 
     public List<IClassTransformer> getSuperTransformers() {
-        return Collections.unmodifiableList(superTransformers);
+        return superTransformers.stream().toList();
     }
 
     public void addClassLoaderExclusion(String toExclude) {
