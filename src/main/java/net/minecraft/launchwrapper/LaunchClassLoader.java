@@ -70,6 +70,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
         addClassLoaderExclusion("org.lwjgl.");
         addClassLoaderExclusion("org.lwjgl3.");
         addClassLoaderExclusion("org.apache.logging.");
+        addClassLoaderExclusion("com.sun.");
         addClassLoaderExclusion("net.minecraft.launchwrapper.");
 
         // transformer exclusions
