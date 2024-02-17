@@ -1,6 +1,5 @@
 package com.cleanroommc.bouncepad;
 
-import com.cleanroommc.bouncepad.api.Blackboard;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -9,16 +8,13 @@ import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import zone.rong.imaginebreaker.NativeImagineBreaker;
+import zone.rong.imaginebreaker.ImagineBreaker;
 
 import java.io.File;
-import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 
 public class Bouncepad {
@@ -56,38 +52,9 @@ public class Bouncepad {
     }
 
     private static void runImagineBreaker() {
-        String imagineBreakerLibraryName = System.mapLibraryName("imaginebreaker");
-        var osVersion = System.getProperty("os.version");
-        if(osVersion != null && osVersion.toLowerCase().contains("android")) {
-            imagineBreakerLibraryName = "libimaginebreaker_android.so";
-        }
-        URL imagineBreakerLibraryUrl = NativeImagineBreaker.class.getClassLoader().getResource(imagineBreakerLibraryName);
-        if (imagineBreakerLibraryUrl == null) {
-            LOGGER.fatal("Unable to launch, {} cannot be found.", imagineBreakerLibraryName);
-            System.exit(1);
-        } else {
-            try {
-                if ("jar".equals(imagineBreakerLibraryUrl.getProtocol())) {
-                    // Extract the native to a temporary file if it resides in a jar (non-dev)
-                    Path tempDir = Files.createTempDirectory("bouncepad");
-                    tempDir.toFile().deleteOnExit();
-                    Path tempFile = tempDir.resolve(imagineBreakerLibraryName);
-                    try (InputStream is = NativeImagineBreaker.class.getClassLoader().getResourceAsStream(imagineBreakerLibraryName)) {
-                        Files.copy(is, tempFile);
-                    }
-                    tempFile.toFile().deleteOnExit();
-                    System.load(tempFile.toAbsolutePath().toString());
-                } else {
-                    // Load as-is if it is outside a jar (dev)
-                    System.load(new File(imagineBreakerLibraryUrl.toURI()).getAbsolutePath());
-                }
-                NativeImagineBreaker.openBaseModules();
-                NativeImagineBreaker.removeAllReflectionFilters();
-            } catch (Throwable t) {
-                LOGGER.fatal("Unable to launch, error loading natives", t);
-                System.exit(1);
-            }
-        }
+        ImagineBreaker.openBootModules();
+        ImagineBreaker.wipeFieldFilters();
+        ImagineBreaker.wipeMethodFilters();
     }
 
     private static void launch(String[] args) {
