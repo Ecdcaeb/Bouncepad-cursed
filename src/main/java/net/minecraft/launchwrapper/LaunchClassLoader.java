@@ -442,6 +442,10 @@ public abstract class LaunchClassLoader extends URLClassLoader {
         }
     }
 
+    public boolean isClassLoaded(String name) {
+        return findLoadedClass(name) != null;
+    }
+
     public void clearNegativeEntries(Set<String> entriesToClear) {
         negativeResourceCache.removeAll(entriesToClear);
     }
