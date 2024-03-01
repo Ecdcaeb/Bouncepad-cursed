@@ -450,4 +450,7 @@ public abstract class LaunchClassLoader extends URLClassLoader {
         negativeResourceCache.removeAll(entriesToClear);
     }
 
+    public Class<?> defineClass(String name, byte[] data) {
+        return this.defineClass(name, data, 0, data.length);
+    }
 }
