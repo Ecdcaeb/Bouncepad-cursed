@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'com.cleanroommc'
-version '0.4.38-cursed'
+version '0.4.39-cursed'
 
 repositories {
     mavenCentral()
